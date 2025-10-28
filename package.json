@@ -17,7 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "prisma": "dotenv -- npx prisma",
+    "prisma:migrate": "dotenv -- npx prisma migrate dev",
+    "prisma:generate": "dotenv -- npx prisma generate",
+    "prisma:studio": "dotenv -- npx prisma studio"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",
@@ -59,6 +63,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/speakeasy": "^2.0.10",
     "@types/supertest": "^6.0.2",
+    "dotenv-cli": "^10.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
