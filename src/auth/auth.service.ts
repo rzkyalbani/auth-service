@@ -3,12 +3,15 @@ import { UsersService } from 'src/users/users.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { User } from 'generated/prisma/client';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async register(registerDto: RegisterAuthDto) {
@@ -49,14 +52,37 @@ export class AuthService {
     return null;
   }
 
-  async login(user: any) {
+  async getTokens(user: User) {
     const payload = {
       sub: user.id,
       email: user.email,
     };
 
-    return {
-      access_token: this.jwtService.sign(payload)
-    }
+    const accessTokenSecret = this.configService.get<string>('JWT_SECRET');
+    const accessTokenExpiresIn = this.configService.get<string>(
+      'ACCESS_TOKEN_EXPIRES_IN',
+    );
+    const refreshTokenSecret =
+      this.configService.get<string>('JWT_REFRESH_SECRET');
+    const refreshTokenExpiresIn = this.configService.get<string>(
+      'REFRESH_TOKEN_EXPIRES_IN',
+    );
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, {
+        secret: accessTokenSecret,
+        expiresIn: accessTokenExpiresIn as any,
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: refreshTokenSecret,
+        expiresIn: refreshTokenExpiresIn as any,
+      }),
+    ]);
+
+    return { accessToken, refreshToken };
+  }
+
+  async login(user: any) {
+    return this.getTokens(user);
   }
 }
