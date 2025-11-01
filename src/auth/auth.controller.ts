@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  HttpCode,
+  HttpStatus,
   Post,
   Request,
   UseGuards,
@@ -31,6 +33,7 @@ export class AuthController {
     };
   }
 
+  @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(
     @Body(new ValidationPipe())
@@ -43,6 +46,7 @@ export class AuthController {
     return this.authService.login(user);
   }
 
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
   async refreshToken(@Request() req) {
