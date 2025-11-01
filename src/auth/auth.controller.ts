@@ -8,9 +8,9 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
-import { LocalAuthGuard } from './guards/local-auth.guard';
 import { LoginAuthDto } from './dto/login-auth.dto';
 import { LocalStrategy } from './strategies/local.strategies';
+import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -41,5 +41,13 @@ export class AuthController {
       loginDto.password,
     );
     return this.authService.login(user);
+  }
+
+  @UseGuards(JwtRefreshGuard)
+  @Post('refresh')
+  async refreshToken(@Request() req) {
+    const userPayload = req.user;
+
+    return this.authService.refreshToken(userPayload);
   }
 }

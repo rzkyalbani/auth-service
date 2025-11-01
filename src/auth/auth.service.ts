@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import * as bcrypt from 'bcrypt';
@@ -83,6 +87,21 @@ export class AuthService {
   }
 
   async login(user: any) {
+    return this.getTokens(user);
+  }
+
+  async refreshToken(payload: any) {
+    const userId = payload.sub;
+    const refreshToken = payload.refreshToken;
+
+    const user = await this.usersService.findOneById(userId);
+    if (!user) {
+      throw new ForbiddenException('Access Denied');
+    }
+
+    // NANTI DI M4:
+    // Di sini akan dicek apakah 'refreshToken' ini ada di whitelist Redis
+
     return this.getTokens(user);
   }
 }
