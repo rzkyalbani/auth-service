@@ -52,6 +52,13 @@ export class AuthController {
   async refreshToken(@Request() req) {
     const userPayload = req.user;
 
-    return this.authService.refreshToken(userPayload);
+    return this.authService.refreshTokens(userPayload);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtRefreshGuard)
+  @Post('logout')
+  async logout(@Request() req) {
+    return this.authService.logout(req.user);
   }
 }

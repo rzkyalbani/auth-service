@@ -9,6 +9,8 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { User } from 'generated/prisma/client';
+import { RedisService } from 'src/redis/redis.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +18,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private redisService: RedisService,
   ) {}
 
   async register(registerDto: RegisterAuthDto) {
@@ -57,9 +60,15 @@ export class AuthService {
   }
 
   async getTokens(user: User) {
-    const payload = {
+    const jti = crypto.randomUUID();
+
+    const accessTokenPayload = {
       sub: user.id,
       email: user.email,
+    };
+    const refreshTokenPayload = {
+      sub: user.id,
+      jti,
     };
 
     const accessTokenSecret = this.configService.get<string>('JWT_SECRET');
@@ -72,36 +81,67 @@ export class AuthService {
       'REFRESH_TOKEN_EXPIRES_IN',
     );
 
+    const redisExpiresInSeconds = 7 * 24 * 60 * 60;
+
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
+      this.jwtService.signAsync(accessTokenPayload, {
         secret: accessTokenSecret,
         expiresIn: accessTokenExpiresIn as any,
       }),
-      this.jwtService.signAsync(payload, {
+      this.jwtService.signAsync(refreshTokenPayload, {
         secret: refreshTokenSecret,
         expiresIn: refreshTokenExpiresIn as any,
       }),
     ]);
 
-    return { accessToken, refreshToken };
+    await this.redisService.set(
+      `session:${jti}`,
+      user.id,
+      'EX',
+      redisExpiresInSeconds,
+    );
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
   }
 
   async login(user: any) {
     return this.getTokens(user);
   }
 
-  async refreshToken(payload: any) {
+  async refreshTokens(payload: any) {
     const userId = payload.sub;
-    const refreshToken = payload.refreshToken;
+    const jti = payload.jti;
+
+    const sessionKey = `session:${jti}`;
+    const sessionUserId = await this.redisService.get(sessionKey);
+
+    if (!sessionUserId) {
+      throw new ForbiddenException('Refresh token is invalid or has been used');
+    }
+
+    if (sessionUserId !== userId) {
+      throw new ForbiddenException('Access Denied');
+    }
+
+    await this.redisService.del(sessionKey);
 
     const user = await this.usersService.findOneById(userId);
     if (!user) {
       throw new ForbiddenException('Access Denied');
     }
 
-    // NANTI DI M4:
-    // Di sini akan dicek apakah 'refreshToken' ini ada di whitelist Redis
-
     return this.getTokens(user);
+  }
+
+  async logout(payload: any) {
+    const jti = payload.jti;
+    const sessionKey = `session:${jti}`;
+
+    await this.redisService.del(sessionKey);
+
+    return { message: 'Logged out successfully' };
   }
 }
