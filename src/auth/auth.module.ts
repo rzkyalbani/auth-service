@@ -8,6 +8,8 @@ import { LocalStrategy } from './strategies/local.strategies';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { RedisModule } from 'src/redis/redis.module';
 import { MailModule } from 'src/mail/mail.module';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
   imports: [
@@ -16,8 +18,9 @@ import { MailModule } from 'src/mail/mail.module';
     JwtModule.register({}),
     RedisModule,
     MailModule,
+    PrismaModule
   ],
-  providers: [AuthService, LocalStrategy, JwtRefreshStrategy],
+  providers: [AuthService, LocalStrategy, JwtRefreshStrategy, GoogleStrategy],
   controllers: [AuthController],
 })
 export class AuthModule {}

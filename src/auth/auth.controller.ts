@@ -19,12 +19,16 @@ import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { Response } from 'express';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { User } from 'generated/prisma/client';
+import { ConfigService } from '@nestjs/config';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private localStrategy: LocalStrategy,
+    private configService: ConfigService,
   ) {}
 
   @Post('register')
@@ -94,5 +98,30 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuth() {}
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuthCallback(@Request() req, @Res() res: Response) {
+    const user = req.user as User;
+
+    if (!user) {
+      res.redirect(
+        `${this.configService.get<string>('FRONTEND_URL')}/login?error=true`,
+      );
+      return;
+    }
+
+    const tokens = await this.authService.getTokens(user);
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+
+    res.redirect(
+      `${frontendUrl}/auth-callback?access_token=${tokens.access_token}&refresh_token=${tokens.refresh_token}`,
+    );
   }
 }

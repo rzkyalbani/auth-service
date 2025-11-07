@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
@@ -15,6 +16,7 @@ import * as crypto from 'crypto';
 import { MailService } from 'src/mail/mail.service';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +26,7 @@ export class AuthService {
     private configService: ConfigService,
     private redisService: RedisService,
     private mailService: MailService,
+    private prisma: PrismaService,
   ) {}
 
   async register(registerDto: RegisterAuthDto) {
@@ -267,5 +270,69 @@ export class AuthService {
     await this.redisService.del(tokenKey);
 
     return { message: 'Password has been reset successfully' };
+  }
+
+  async validateOAuthUser(profile: {
+    provider: string;
+    providerId: string;
+    email: string;
+    displayName: string;
+    picture: string;
+  }) {
+    try {
+      const oauthAccount = await this.prisma.oAuthAccount.findUnique({
+        where: {
+          provider_providerId: {
+            provider: profile.provider,
+            providerId: profile.providerId,
+          },
+        },
+        include: { user: true },
+      });
+
+      if (oauthAccount) {
+        return oauthAccount.user;
+      }
+
+      const userByEmail = await this.usersService.findOneByEmail(profile.email);
+
+      if (userByEmail) {
+        await this.prisma.oAuthAccount.create({
+          data: {
+            provider: profile.provider,
+            providerId: profile.providerId,
+            displayName: profile.displayName,
+            picture: profile.picture,
+            userId: userByEmail.id,
+          },
+        });
+
+        if (!userByEmail.emailVerifiedAt) {
+          return this.usersService.updateEmailVerified(userByEmail.id);
+        }
+        return userByEmail;
+      }
+
+      const newUser = await this.prisma.user.create({
+        data: {
+          email: profile.email,
+          displayName: profile.displayName,
+          provider: 'GOOGLE',
+          emailVerifiedAt: new Date(),
+          oauthAccounts: {
+            create: {
+              provider: profile.provider,
+              providerId: profile.providerId,
+              displayName: profile.displayName,
+              picture: profile.picture,
+            },
+          },
+        },
+      });
+
+      return newUser;
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to process OAuth user');
+    }
   }
 }
