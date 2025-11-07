@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
@@ -28,12 +29,31 @@ export class AuthService {
       registerDto.email,
     );
 
-    if (userExists) {
-      throw new ConflictException('Email already registered');
-    }
-
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
+
+    if (userExists) {
+      if (userExists.emailVerifiedAt) {
+        throw new ConflictException('Email already registered and verified.');
+      }
+
+      try {
+        const updatedUser = await this.usersService.updateRegistrationData(
+          userExists.id,
+          {
+            displayName: registerDto.displayName,
+            passwordHash: passwordHash,
+          },
+        );
+
+        await this.sendVerificationEmail(updatedUser);
+
+        const { passwordHash: removedHash, ...result } = updatedUser;
+        return result;
+      } catch (error) {
+        throw new ConflictException('Could not update user');
+      }
+    }
 
     try {
       const newUser = await this.usersService.create({
@@ -52,7 +72,7 @@ export class AuthService {
         3600,
       );
 
-      this.mailService.sendUserVerification(newUser, verificationToken);
+      await this.sendVerificationEmail(newUser);
 
       const { passwordHash: removedHash, ...result } = newUser;
       return result;
@@ -62,9 +82,21 @@ export class AuthService {
   }
 
   async validateUser(email: string, pass: string): Promise<any> {
-    const user = await this.usersService.findOneByEmail(email);
+    const emailString = String(email);
+    const passString = String(pass);
 
-    if (user && (await bcrypt.compare(pass, user.passwordHash as string))) {
+    const user = await this.usersService.findOneByEmail(emailString);
+
+    if (
+      user &&
+      (await bcrypt.compare(passString, user.passwordHash as string))
+    ) {
+      if (!user.emailVerifiedAt) {
+        throw new UnauthorizedException(
+          'Please verify your email before logging in.',
+        );
+      }
+
       const { passwordHash: removedHash, ...result } = user;
       return result;
     }
@@ -176,5 +208,16 @@ export class AuthService {
     await this.redisService.del(tokenKey);
 
     return { message: 'Email verified successfully' };
+  }
+
+  private async sendVerificationEmail(user: User) {
+    const verificationToken = crypto.randomUUID();
+    await this.redisService.set(
+      `verify-email:${verificationToken}`,
+      user.id,
+      'EX',
+      3600,
+    );
+    this.mailService.sendUserVerification(user, verificationToken);
   }
 }

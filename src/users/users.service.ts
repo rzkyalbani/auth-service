@@ -27,7 +27,21 @@ export class UsersService {
   async updateEmailVerified(id: string): Promise<User> {
     return this.prisma.user.update({
       where: { id },
-      data: { emailVerifiedAt: new Date() }, // Set tanggal verifikasi
+      data: { emailVerifiedAt: new Date() },
+    });
+  }
+
+  async updateRegistrationData(
+    id: string,
+    data: { displayName: string; passwordHash: string },
+  ): Promise<User> {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        displayName: data.displayName,
+        passwordHash: data.passwordHash,
+        emailVerifiedAt: null,
+      },
     });
   }
 }
