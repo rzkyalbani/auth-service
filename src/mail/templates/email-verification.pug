@@ -1,0 +1,13 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="UTF-8")
+    title Verifikasi Email
+  body
+    h2 Halo, #{displayName}!
+    p Terima kasih sudah mendaftar. Silakan klik link di bawah ini untuk memverifikasi email kamu:
+    p
+      a(href=verificationUrl, target="_blank") Verifikasi Email Saya
+    p Link ini hanya berlaku selama 1 jam.
+    p
+      small Jika kamu tidak mendaftar, abaikan email ini.

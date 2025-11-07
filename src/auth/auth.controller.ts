@@ -1,10 +1,13 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Request,
+  Res,
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
@@ -13,6 +16,7 @@ import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
 import { LocalStrategy } from './strategies/local.strategies';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
+import { Response } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -60,5 +64,24 @@ export class AuthController {
   @Post('logout')
   async logout(@Request() req) {
     return this.authService.logout(req.user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Get('verify-email')
+  async verifyEmail(
+    @Query('token') token: string,
+    @Res() res: Response,
+  ) {
+    if (!token) {
+      return res.status(400).send('Missing verification token');
+    }
+
+    try {
+      await this.authService.verifyEmail(token);
+      
+      return res.redirect('http://localhost:3001/login?verified=true');
+    } catch (error) {
+      return res.status(error.getStatus() || 500).send(error.message);
+    }
   }
 }

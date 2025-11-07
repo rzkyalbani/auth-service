@@ -7,9 +7,16 @@ import { JwtModule } from '@nestjs/jwt';
 import { LocalStrategy } from './strategies/local.strategies';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { RedisModule } from 'src/redis/redis.module';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
-  imports: [UsersModule, PassportModule, JwtModule.register({}), RedisModule],
+  imports: [
+    UsersModule,
+    PassportModule,
+    JwtModule.register({}),
+    RedisModule,
+    MailModule,
+  ],
   providers: [AuthService, LocalStrategy, JwtRefreshStrategy],
   controllers: [AuthController],
 })

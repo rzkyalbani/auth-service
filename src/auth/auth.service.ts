@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { User } from 'generated/prisma/client';
 import { RedisService } from 'src/redis/redis.service';
 import * as crypto from 'crypto';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private redisService: RedisService,
+    private mailService: MailService,
   ) {}
 
   async register(registerDto: RegisterAuthDto) {
@@ -40,6 +42,17 @@ export class AuthService {
         passwordHash,
         provider: 'LOCAL',
       });
+
+      const verificationToken = crypto.randomUUID();
+
+      await this.redisService.set(
+        `verify-email:${verificationToken}`,
+        newUser.id,
+        'EX',
+        3600,
+      );
+
+      this.mailService.sendUserVerification(newUser, verificationToken);
 
       const { passwordHash: removedHash, ...result } = newUser;
       return result;
@@ -143,5 +156,25 @@ export class AuthService {
     await this.redisService.del(sessionKey);
 
     return { message: 'Logged out successfully' };
+  }
+
+  async verifyEmail(token: string) {
+    const tokenKey = `verify-email:${token}`;
+
+    const userId = await this.redisService.get(tokenKey);
+
+    if (!userId) {
+      throw new ForbiddenException('Invalid or expired verification token');
+    }
+
+    try {
+      await this.usersService.updateEmailVerified(userId);
+    } catch (error) {
+      throw new ConflictException('User not found or already verified');
+    }
+
+    await this.redisService.del(tokenKey);
+
+    return { message: 'Email verified successfully' };
   }
 }
