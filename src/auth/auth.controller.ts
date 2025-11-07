@@ -17,6 +17,8 @@ import { LoginAuthDto } from './dto/login-auth.dto';
 import { LocalStrategy } from './strategies/local.strategies';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { Response } from 'express';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -68,20 +70,29 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Get('verify-email')
-  async verifyEmail(
-    @Query('token') token: string,
-    @Res() res: Response,
-  ) {
+  async verifyEmail(@Query('token') token: string, @Res() res: Response) {
     if (!token) {
       return res.status(400).send('Missing verification token');
     }
 
     try {
       await this.authService.verifyEmail(token);
-      
+
       return res.redirect('http://localhost:3001/login?verified=true');
     } catch (error) {
       return res.status(error.getStatus() || 500).send(error.message);
     }
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('request-password-reset')
+  async requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.requestPasswordReset(dto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

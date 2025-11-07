@@ -13,6 +13,8 @@ import { User } from 'generated/prisma/client';
 import { RedisService } from 'src/redis/redis.service';
 import * as crypto from 'crypto';
 import { MailService } from 'src/mail/mail.service';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 
 @Injectable()
 export class AuthService {
@@ -219,5 +221,51 @@ export class AuthService {
       3600,
     );
     this.mailService.sendUserVerification(user, verificationToken);
+  }
+
+  async requestPasswordReset(dto: RequestPasswordResetDto) {
+    const { email } = dto;
+    const user = await this.usersService.findOneByEmail(email);
+
+    if (user && user.emailVerifiedAt) {
+      const resetToken = crypto.randomUUID();
+
+      await this.redisService.set(
+        `reset-pass:${resetToken}`,
+        user.id,
+        'EX',
+        900,
+      );
+
+      this.mailService.sendPasswordReset(user, resetToken);
+    }
+
+    return {
+      message:
+        'If a user with that email exists, a password reset link has been sent.',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const { token, newPassword } = dto;
+    const tokenKey = `reset-pass:${token}`;
+
+    const userId = await this.redisService.get(tokenKey);
+    if (!userId) {
+      throw new ForbiddenException('Invalid or expired password reset token');
+    }
+
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    try {
+      await this.usersService.updatePassword(userId, passwordHash); // <-- Kita perlu buat ini
+    } catch (error) {
+      throw new ConflictException('User not found');
+    }
+
+    await this.redisService.del(tokenKey);
+
+    return { message: 'Password has been reset successfully' };
   }
 }
