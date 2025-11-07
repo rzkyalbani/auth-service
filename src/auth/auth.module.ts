@@ -10,6 +10,9 @@ import { RedisModule } from 'src/redis/redis.module';
 import { MailModule } from 'src/mail/mail.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { PrismaModule } from 'src/prisma/prisma.module';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { EncryptionModule } from 'src/common/encryption/encryption.module';
+import { EncryptionService } from 'src/common/encryption/encryption.service';
 
 @Module({
   imports: [
@@ -18,9 +21,17 @@ import { PrismaModule } from 'src/prisma/prisma.module';
     JwtModule.register({}),
     RedisModule,
     MailModule,
-    PrismaModule
+    PrismaModule,
+    EncryptionModule,
   ],
-  providers: [AuthService, LocalStrategy, JwtRefreshStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    LocalStrategy,
+    JwtRefreshStrategy,
+    GoogleStrategy,
+    JwtStrategy,
+    EncryptionService,
+  ],
   controllers: [AuthController],
 })
 export class AuthModule {}
