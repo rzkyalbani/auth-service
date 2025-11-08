@@ -26,6 +26,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import * as qrcode from 'qrcode';
 import { TwoFaCodeDto } from './dto/2fa-code.dto';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
@@ -47,6 +48,12 @@ export class AuthController {
     };
   }
 
+  @Throttle({
+    default: {
+      ttl: 60000,
+      limit: 5,  
+    }
+  })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(@Body() loginDto: LoginAuthDto) {
