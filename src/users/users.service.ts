@@ -51,4 +51,18 @@ export class UsersService {
       data: { passwordHash: passwordHash },
     });
   }
+
+  async set2FASecret(id: string, secret: string) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { twoFASecretEnc: secret },
+    });
+  }
+
+  async set2FAEnabled(id: string, enabled: boolean) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { twoFAEnabled: enabled },
+    });
+  }
 }

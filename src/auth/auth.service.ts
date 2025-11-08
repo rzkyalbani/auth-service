@@ -17,6 +17,8 @@ import { MailService } from 'src/mail/mail.service';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { EncryptionService } from 'src/common/encryption/encryption.service';
+import * as speakeasy from 'speakeasy';
 
 @Injectable()
 export class AuthService {
@@ -27,6 +29,7 @@ export class AuthService {
     private redisService: RedisService,
     private mailService: MailService,
     private prisma: PrismaService,
+    private encryptionService: EncryptionService,
   ) {}
 
   async register(registerDto: RegisterAuthDto) {
@@ -93,7 +96,7 @@ export class AuthService {
     const user = await this.usersService.findOneByEmail(emailString);
 
     if (
-      user &&
+      user && user.provider == 'LOCAL' &&
       (await bcrypt.compare(passString, user.passwordHash as string))
     ) {
       if (!user.emailVerifiedAt) {
@@ -334,5 +337,67 @@ export class AuthService {
     } catch (error) {
       throw new InternalServerErrorException('Failed to process OAuth user');
     }
+  }
+
+  async generate2FASecret(user: User) {
+    const secret = speakeasy.generateSecret({
+      name: `AuthService (${user.email})`,
+    });
+
+    const encryptedSecret = this.encryptionService.encrypt(secret.base32);
+
+    await this.usersService.set2FASecret(user.id, encryptedSecret); 
+
+    return speakeasy.otpauthURL({
+      secret: secret.ascii, 
+      label: `AuthService (${user.email})`,
+      issuer: 'AuthService',
+      encoding: 'ascii',
+    });
+  }
+
+  async enable2FA(userId: string, code: string) {
+    const user = await this.usersService.findOneById(userId);
+    if (!user || !user.twoFASecretEnc) {
+      throw new ForbiddenException('2FA secret not set');
+    }
+
+    const decryptedSecret = this.encryptionService.decrypt(user.twoFASecretEnc);
+
+    const isVerified = speakeasy.totp.verify({
+      secret: decryptedSecret,
+      encoding: 'base32',
+      token: code,
+      window: 1, 
+    });
+
+    if (!isVerified) {
+      throw new UnauthorizedException('Invalid 2FA code');
+    }
+
+    await this.usersService.set2FAEnabled(userId, true);
+    return { message: '2FA has been enabled successfully' };
+  }
+
+  async verify2FALogin(userId: string, code: string) {
+    const user = await this.usersService.findOneById(userId);
+    if (!user || !user.twoFASecretEnc) {
+      throw new ForbiddenException('User not found or 2FA not set up');
+    }
+
+    const decryptedSecret = this.encryptionService.decrypt(user.twoFASecretEnc);
+
+    const isVerified = speakeasy.totp.verify({
+      secret: decryptedSecret,
+      encoding: 'base32',
+      token: code,
+      window: 1,
+    });
+
+    if (!isVerified) {
+      throw new UnauthorizedException('Invalid 2FA code');
+    }
+
+    return this.getTokens(user);
   }
 }

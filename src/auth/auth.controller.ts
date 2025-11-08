@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -22,6 +23,9 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { User } from 'generated/prisma/client';
 import { ConfigService } from '@nestjs/config';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import * as qrcode from 'qrcode';
+import { TwoFaCodeDto } from './dto/2fa-code.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -45,15 +49,30 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  async login(
-    @Body(new ValidationPipe())
-    loginDto: LoginAuthDto,
-  ) {
+  async login(@Body() loginDto: LoginAuthDto) {
     const user = await this.localStrategy.validate(
       loginDto.email,
       loginDto.password,
-    );
+    ); 
+
+    if (user.twoFAEnabled) {
+      return {
+        message: '2FA code required',
+        twoFARequired: true,
+        userId: user.id,
+      };
+    }
+
     return this.authService.login(user);
+  }
+
+  @Post('2fa/verify-login')
+  @HttpCode(HttpStatus.OK)
+  async verifyLogin2FA(@Body() dto: TwoFaCodeDto & { userId: string }) {
+    if (!dto.userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.authService.verify2FALogin(dto.userId, dto.code);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -123,5 +142,26 @@ export class AuthController {
     res.redirect(
       `${frontendUrl}/auth-callback?access_token=${tokens.access_token}&refresh_token=${tokens.refresh_token}`,
     );
+  }
+
+  @Post('2fa/setup')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async setup2FA(@Request() req, @Res() res: Response) {
+    const user = req.user as User;
+
+    const otpauthUrl = await this.authService.generate2FASecret(user);
+
+    const qrCodeDataUrl = await qrcode.toDataURL(otpauthUrl);
+
+    res.json({ qrCodeUrl: qrCodeDataUrl });
+  }
+
+  @Post('2fa/enable')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async enable2FA(@Request() req, @Body() dto: TwoFaCodeDto) {
+    const user = req.user as User;
+    return this.authService.enable2FA(user.id, dto.code);
   }
 }
