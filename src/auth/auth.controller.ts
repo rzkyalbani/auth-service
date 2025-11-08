@@ -12,6 +12,12 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -28,6 +34,7 @@ import * as qrcode from 'qrcode';
 import { TwoFaCodeDto } from './dto/2fa-code.dto';
 import { Throttle } from '@nestjs/throttler';
 
+@ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -36,6 +43,15 @@ export class AuthController {
     private configService: ConfigService,
   ) {}
 
+  @ApiOperation({
+    summary: 'Register Pengguna',
+    description: 'Mendaftarkan pengguna baru dan mengirim email verifikasi.',
+  })
+  @ApiResponse({ status: 201, description: 'User berhasil didaftarkan.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Email sudah terdaftar atau konflik lain.',
+  })
   @Post('register')
   async register(
     @Body(new ValidationPipe())
@@ -48,11 +64,24 @@ export class AuthController {
     };
   }
 
+  @ApiOperation({
+    summary: 'Login Pengguna',
+    description:
+      'Mendapatkan Access Token & Refresh Token jika kredensial valid.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Login berhasil, mengembalikan tokens.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Kredensial salah atau email belum diverifikasi.',
+  })
   @Throttle({
     default: {
       ttl: 60000,
-      limit: 5,  
-    }
+      limit: 5,
+    },
   })
   @HttpCode(HttpStatus.OK)
   @Post('login')
@@ -60,7 +89,7 @@ export class AuthController {
     const user = await this.localStrategy.validate(
       loginDto.email,
       loginDto.password,
-    ); 
+    );
 
     if (user.twoFAEnabled) {
       return {
@@ -82,6 +111,13 @@ export class AuthController {
     return this.authService.verify2FALogin(dto.userId, dto.code);
   }
 
+  @ApiOperation({
+    summary: 'Refresh Token',
+    description: 'Mendapatkan access token baru menggunakan refresh token.',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Tokens berhasil direfresh.' })
+  @ApiResponse({ status: 403, description: 'Refresh token tidak valid.' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
@@ -91,6 +127,13 @@ export class AuthController {
     return this.authService.refreshTokens(userPayload);
   }
 
+  @ApiOperation({
+    summary: 'Logout',
+    description: 'Menghapus session refresh token (logout).',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Berhasil logout.' })
+  @ApiResponse({ status: 403, description: 'Refresh token tidak valid.' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
   @Post('logout')
@@ -98,6 +141,15 @@ export class AuthController {
     return this.authService.logout(req.user);
   }
 
+  @ApiOperation({
+    summary: 'Verifikasi Email',
+    description: 'Memverifikasi email pengguna menggunakan token.',
+  })
+  @ApiResponse({ status: 200, description: 'Email berhasil diverifikasi.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Token verifikasi tidak valid atau kadaluarsa.',
+  })
   @HttpCode(HttpStatus.OK)
   @Get('verify-email')
   async verifyEmail(@Query('token') token: string, @Res() res: Response) {
@@ -114,15 +166,37 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({
+    summary: 'Request Password Reset',
+    description:
+      'Mengirimkan email berisi token untuk reset password jika akun ada.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Jika akun ada, email reset telah dikirim.',
+  })
+  @ApiResponse({ status: 400, description: 'Permintaan tidak valid.' })
   @HttpCode(HttpStatus.OK)
   @Post('request-password-reset')
-  async requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+  async requestPasswordReset(
+    @Body(new ValidationPipe()) dto: RequestPasswordResetDto,
+  ) {
     return this.authService.requestPasswordReset(dto);
   }
 
+  @ApiOperation({
+    summary: 'Reset Password',
+    description:
+      'Mereset password menggunakan token yang dikirim melalui email.',
+  })
+  @ApiResponse({ status: 200, description: 'Password berhasil direset.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Token tidak valid atau kadaluarsa.',
+  })
   @HttpCode(HttpStatus.OK)
   @Post('reset-password')
-  async resetPassword(@Body() dto: ResetPasswordDto) {
+  async resetPassword(@Body(new ValidationPipe()) dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
 
@@ -151,6 +225,10 @@ export class AuthController {
     );
   }
 
+  @ApiOperation({ summary: 'Generate QR Code untuk 2FA' })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Mengembalikan data URL QR Code' })
+  @ApiResponse({ status: 401, description: 'Unauthorized (Token tidak valid)' })
   @Post('2fa/setup')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
@@ -164,10 +242,20 @@ export class AuthController {
     res.json({ qrCodeUrl: qrCodeDataUrl });
   }
 
+  @ApiOperation({
+    summary: 'Enable 2FA',
+    description: 'Mengaktifkan 2FA untuk user setelah memverifikasi kode.',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: '2FA berhasil diaktifkan.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized (Token tidak valid)' })
   @Post('2fa/enable')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  async enable2FA(@Request() req, @Body() dto: TwoFaCodeDto) {
+  async enable2FA(
+    @Request() req,
+    @Body(new ValidationPipe()) dto: TwoFaCodeDto,
+  ) {
     const user = req.user as User;
     return this.authService.enable2FA(user.id, dto.code);
   }
