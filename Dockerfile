@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 WORKDIR /app
 COPY package.json yarn.lock* package-lock.json* ./
 RUN npm install
@@ -7,7 +7,7 @@ COPY .env.example .env
 RUN npm run prisma:generate
 RUN npm run build
 
-FROM node:18-alpine AS runner
+FROM node:18-slim AS runner
 WORKDIR /app
 
 COPY package.json yarn.lock* package-lock.json* ./
