@@ -21,7 +21,8 @@
     "prisma": "dotenv -- npx prisma",
     "prisma:migrate": "dotenv -- npx prisma migrate dev",
     "prisma:generate": "dotenv -- npx prisma generate",
-    "prisma:studio": "dotenv -- npx prisma studio"
+    "prisma:studio": "dotenv -- npx prisma studio",
+    "prisma:migrate:prod": "npx prisma migrate deploy"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.1",
