@@ -1,4 +1,3 @@
-// src/auth/auth.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { UsersService } from 'src/users/users.service';
@@ -10,6 +9,15 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { EncryptionService } from 'src/common/encryption/encryption.service';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { User } from 'generated/prisma/client';
+import * as speakeasy from 'speakeasy';
+
+jest.mock('speakeasy', () => ({
+  generateSecret: jest.fn(),
+  totp: {
+    verify: jest.fn(),
+  },
+  otpauthURL: jest.fn(),
+}));
 
 const mockUser: User = {
   id: 'user-123',
@@ -140,6 +148,61 @@ describe('AuthService', () => {
 
       expect(redisService.del).not.toHaveBeenCalled();
       expect(usersService.findOneById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('verify2FALogin', () => {
+    const mockUser2FA: User = {
+      ...mockUser,
+      id: 'user-2fa-123',
+      twoFAEnabled: true,
+      twoFASecretEnc: 'ini-rahasia-terenkripsi',
+    };
+
+    beforeEach(() => {
+      (speakeasy.totp.verify as jest.Mock).mockReset();
+    });
+
+    it('should return tokens if 2FA code is valid', async () => {
+      (mockUsersService.findOneById as jest.Mock).mockResolvedValue(
+        mockUser2FA,
+      );
+      (mockEncryptionService.decrypt as jest.Mock).mockReturnValue(
+        'ini-rahasia-dekripsi',
+      );
+
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+
+      const result = await service.verify2FALogin('user-2fa-123', '123456');
+
+      expect(result).toHaveProperty('access_token');
+      expect(result).toHaveProperty('refresh_token');
+
+      expect(speakeasy.totp.verify).toHaveBeenCalledWith({
+        secret: 'ini-rahasia-dekripsi',
+        encoding: 'base32',
+        token: '123456',
+        window: 1,
+      });
+
+      expect(redisService.set).toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException if 2FA code is invalid', async () => {
+      (mockUsersService.findOneById as jest.Mock).mockResolvedValue(
+        mockUser2FA,
+      );
+      (mockEncryptionService.decrypt as jest.Mock).mockReturnValue(
+        'ini-rahasia-dekripsi',
+      );
+
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(false);
+
+      await expect(
+        service.verify2FALogin('user-2fa-123', 'kode-salah-666'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(redisService.set).not.toHaveBeenCalled();
     });
   });
 });
