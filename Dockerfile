@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package.json yarn.lock* package-lock.json* ./
 
-RUN npm install --omit=dev
+RUN npm install
 
 COPY . .
 
@@ -12,6 +12,7 @@ COPY .env.example .env
 RUN npm run prisma:generate
 
 RUN npm run build
+RUN npm prune --production
 
 FROM node:18-alpine AS runner
 
